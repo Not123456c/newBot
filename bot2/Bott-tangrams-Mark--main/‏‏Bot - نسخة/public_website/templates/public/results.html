@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نتائج الطالب | بوت النتائج الجامعية</title>
+    <meta name="description" content="عرض نتائج الطالب الأكاديمية">
+    
+    <!-- Open Graph للمشاركة -->
+    <meta property="og:title" content="نتائج الطالب">
+    <meta property="og:description" content="اطلع على نتائجك الأكاديمية">
+    <meta property="og:type" content="website">
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --warning: #f59e0b;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+        }
+        
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border-radius: 0 0 30px 30px;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 10px;
+        }
+        
+        .header .student-id {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+        
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 60px;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Cards */
+        .card {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+            background: var(--bg);
+            border-radius: 12px;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        
+        /* Rating Badge */
+        .rating-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: white;
+        }
+        
+        /* Subjects Table */
+        .subjects-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .subjects-table th,
+        .subjects-table td {
+            padding: 12px;
+            text-align: right;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .subjects-table th {
+            background: var(--bg);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .subjects-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .grade-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .grade-badge.passed {
+            background: #dcfce7;
+            color: var(--success);
+        }
+        
+        .grade-badge.failed {
+            background: #fee2e2;
+            color: var(--danger);
+        }
+        
+        /* Chart Container */
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+        
+        /* Share Button */
+        .share-section {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .share-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .share-btn:hover {
+            background: var(--primary-dark);
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        
+        .footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        /* Error State */
+        .error-state {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        
+        .error-state .icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .stat-value {
+                font-size: 1.5rem;
+            }
+            
+            .subjects-table th,
+            .subjects-table td {
+                padding: 8px;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎓 نتائج الطالب</h1>
+        <p class="student-id" id="header-student-id">جاري التحميل...</p>
+    </div>
+    
+    <div class="container">
+        <!-- Loading State -->
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>جاري تحميل النتائج...</p>
+        </div>
+        
+        <!-- Error State -->
+        <div id="error" class="error-state" style="display: none;">
+            <div class="icon">😕</div>
+            <h2>لم يتم العثور على نتائج</h2>
+            <p>تأكد من صحة الرقم الامتحاني</p>
+        </div>
+        
+        <!-- Results Content -->
+        <div id="content" style="display: none;">
+            <!-- Student Info -->
+            <div class="card" id="student-info">
+                <div style="text-align: center;">
+                    <h2 id="student-name" style="font-size: 1.5rem; margin-bottom: 10px;"></h2>
+                    <div id="rating-badge" class="rating-badge"></div>
+                </div>
+            </div>
+            
+            <!-- Stats -->
+            <div class="card">
+                <h3 class="card-title">📊 الإحصائيات</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-average">0</div>
+                        <div class="stat-label">المعدل العام</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-passed" style="color: var(--success);">0</div>
+                        <div class="stat-label">مواد ناجحة</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-failed" style="color: var(--danger);">0</div>
+                        <div class="stat-label">مواد راسبة</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-rate">0%</div>
+                        <div class="stat-label">نسبة النجاح</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chart -->
+            <div class="card">
+                <h3 class="card-title">📈 الرسم البياني</h3>
+                <div class="chart-container">
+                    <canvas id="grades-chart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Subjects Table -->
+            <div class="card">
+                <h3 class="card-title">📚 تفاصيل المواد</h3>
+                <table class="subjects-table">
+                    <thead>
+                        <tr>
+                            <th>المادة</th>
+                            <th>النظري</th>
+                            <th>العملي</th>
+                            <th>المجموع</th>
+                            <th>النتيجة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="subjects-tbody">
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Share -->
+            <div class="share-section">
+                <button class="share-btn" onclick="shareResults()">
+                    📤 مشاركة النتائج
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p>🎓 بوت النتائج الجامعية</p>
+        <p><a href="https://t.me/YOUR_BOT">@YourBot</a></p>
+    </div>
+    
+    <script>
+        let resultsData = null;
+        
+        // استخراج الرقم الامتحاني من الرابط
+        const pathParts = window.location.pathname.split('/');
+        const studentId = pathParts[pathParts.length - 1];
+        
+        document.getElementById('header-student-id').textContent = `الرقم: ${studentId}`;
+        
+        // تحميل البيانات
+        async function loadResults() {
+            try {
+                const response = await fetch(`/api/public/results/${studentId}`);
+                const data = await response.json();
+                
+                document.getElementById('loading').style.display = 'none';
+                
+                if (data.success) {
+                    resultsData = data;
+                    displayResults(data);
+                    document.getElementById('content').style.display = 'block';
+                } else {
+                    document.getElementById('error').style.display = 'block';
+                }
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+            }
+        }
+        
+        function displayResults(data) {
+            // اسم الطالب
+            document.getElementById('student-name').textContent = data.student_name;
+            
+            // التقدير
+            const ratingBadge = document.getElementById('rating-badge');
+            ratingBadge.textContent = `${data.rating.name} - ${data.rating.label}`;
+            ratingBadge.style.background = data.rating.color;
+            
+            // الإحصائيات
+            document.getElementById('stat-average').textContent = data.stats.average_grade;
+            document.getElementById('stat-passed').textContent = data.stats.passed_subjects;
+            document.getElementById('stat-failed').textContent = data.stats.failed_subjects;
+            document.getElementById('stat-rate').textContent = data.stats.success_rate + '%';
+            
+            // جدول المواد
+            const tbody = document.getElementById('subjects-tbody');
+            tbody.innerHTML = '';
+            
+            data.marks.forEach(mark => {
+                const grade = mark.total_grade || 0;
+                const passed = grade >= 60;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${mark.subject_name || '-'}</td>
+                    <td>${mark.theoretical_grade || '-'}</td>
+                    <td>${mark.practical_grade || '-'}</td>
+                    <td><strong>${grade}</strong></td>
+                    <td>
+                        <span class="grade-badge ${passed ? 'passed' : 'failed'}">
+                            ${passed ? 'ناجح' : 'راسب'}
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // الرسم البياني
+            createChart(data.marks);
+        }
+        
+        function createChart(marks) {
+            const ctx = document.getElementById('grades-chart').getContext('2d');
+            
+            const labels = marks.map(m => m.subject_name?.substring(0, 10) || '');
+            const grades = marks.map(m => m.total_grade || 0);
+            const colors = grades.map(g => g >= 60 ? '#16a34a' : '#dc2626');
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'الدرجة',
+                        data: grades,
+                        backgroundColor: colors,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+        
+        function shareResults() {
+            if (!resultsData) return;
+            
+            const text = `📊 نتائج ${resultsData.student_name}
+📈 المعدل: ${resultsData.stats.average_grade}%
+✅ ناجح في ${resultsData.stats.passed_subjects} مادة
+🔗 ${window.location.href}`;
+            
+            if (navigator.share) {
+                navigator.share({
+                    title: 'نتائجي الأكاديمية',
+                    text: text,
+                    url: window.location.href
+                });
+            } else {
+                navigator.clipboard.writeText(text);
+                alert('تم نسخ النتائج!');
+            }
+        }
+        
+        // تحميل البيانات عند فتح الصفحة
+        loadResults();
+    </script>
+</body>
+</html>

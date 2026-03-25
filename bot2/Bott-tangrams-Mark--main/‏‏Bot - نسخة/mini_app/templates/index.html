@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>بوت النتائج الجامعية</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- شاشة التحميل -->
+        <div id="loading-screen" class="screen active">
+            <div class="loader"></div>
+            <p>جاري التحميل...</p>
+        </div>
+
+        <!-- شاشة ربط الحساب -->
+        <div id="link-screen" class="screen">
+            <div class="header">
+                <h1>🎓 بوت النتائج الجامعية</h1>
+                <p>اربط رقمك الامتحاني لعرض نتائجك</p>
+            </div>
+            
+            <div class="card">
+                <div class="input-group">
+                    <label for="student-id-input">الرقم الامتحاني</label>
+                    <input type="text" id="student-id-input" placeholder="أدخل رقمك الامتحاني" inputmode="numeric">
+                </div>
+                <button id="link-btn" class="btn btn-primary">
+                    <span>🔗 ربط الحساب</span>
+                </button>
+                
+                <div class="divider">أو</div>
+                
+                <div class="input-group">
+                    <label for="search-input">البحث بالاسم</label>
+                    <input type="text" id="search-input" placeholder="ابحث باسمك...">
+                </div>
+                <div id="search-results" class="search-results"></div>
+            </div>
+        </div>
+
+        <!-- الشاشة الرئيسية -->
+        <div id="main-screen" class="screen">
+            <!-- الهيدر مع الملف الشخصي -->
+            <div class="profile-header">
+                <div class="profile-info">
+                    <div class="avatar" id="user-avatar">👤</div>
+                    <div class="info">
+                        <h2 id="student-name">اسم الطالب</h2>
+                        <p id="student-id-display">الرقم الامتحاني</p>
+                    </div>
+                </div>
+                <button id="settings-btn" class="icon-btn">⚙️</button>
+            </div>
+
+            <!-- بطاقة المعدل -->
+            <div class="stats-card">
+                <div class="main-stat">
+                    <span class="stat-value" id="average-grade">0</span>
+                    <span class="stat-label">المعدل العام</span>
+                </div>
+                <div class="mini-stats">
+                    <div class="mini-stat success">
+                        <span id="passed-count">0</span>
+                        <span>ناجح</span>
+                    </div>
+                    <div class="mini-stat danger">
+                        <span id="failed-count">0</span>
+                        <span>راسب</span>
+                    </div>
+                    <div class="mini-stat info">
+                        <span id="success-rate">0%</span>
+                        <span>نسبة النجاح</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- التنقل -->
+            <div class="tabs">
+                <button class="tab active" data-tab="results">📚 النتائج</button>
+                <button class="tab" data-tab="charts">📊 الرسوم</button>
+                <button class="tab" data-tab="top">🏆 الأوائل</button>
+                <button class="tab" data-tab="exams">📅 الامتحانات</button>
+            </div>
+
+            <!-- محتوى التبويبات -->
+            <div id="tab-content">
+                <!-- تبويب النتائج -->
+                <div id="results-tab" class="tab-panel active">
+                    <div class="subjects-list" id="subjects-list">
+                        <!-- سيتم ملؤها بـ JavaScript -->
+                    </div>
+                </div>
+
+                <!-- تبويب الرسوم البيانية -->
+                <div id="charts-tab" class="tab-panel">
+                    <div class="chart-container">
+                        <h3>📊 درجات المواد</h3>
+                        <canvas id="grades-chart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>📈 النظري vs العملي</h3>
+                        <canvas id="theory-practical-chart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>🥧 نسبة النجاح</h3>
+                        <canvas id="pie-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- تبويب الأوائل -->
+                <div id="top-tab" class="tab-panel">
+                    <div class="top-controls">
+                        <select id="top-count">
+                            <option value="3">أفضل 3</option>
+                            <option value="5">أفضل 5</option>
+                            <option value="10" selected>أفضل 10</option>
+                        </select>
+                    </div>
+                    <div class="top-list" id="top-list">
+                        <!-- سيتم ملؤها بـ JavaScript -->
+                    </div>
+                </div>
+
+                <!-- تبويب الامتحانات -->
+                <div id="exams-tab" class="tab-panel">
+                    <div class="exams-list" id="exams-list">
+                        <!-- سيتم ملؤها بـ JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- الأزرار السفلية -->
+            <div class="bottom-actions">
+                <button id="share-btn" class="action-btn">
+                    <span>📤</span>
+                    <span>مشاركة</span>
+                </button>
+                <button id="pdf-btn" class="action-btn">
+                    <span>📥</span>
+                    <span>PDF</span>
+                </button>
+                <button id="refresh-btn" class="action-btn">
+                    <span>🔄</span>
+                    <span>تحديث</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- نافذة الإعدادات -->
+        <div id="settings-modal" class="modal">
+            <div class="modal-content">
+                <h3>⚙️ الإعدادات</h3>
+                <div class="settings-item">
+                    <span>الرقم الامتحاني المربوط</span>
+                    <span id="linked-student-id">-</span>
+                </div>
+                <button id="unlink-btn" class="btn btn-danger">
+                    🔓 إلغاء ربط الحساب
+                </button>
+                <button id="close-settings" class="btn btn-secondary">
+                    إغلاق
+                </button>
+            </div>
+        </div>
+
+        <!-- Toast للإشعارات -->
+        <div id="toast" class="toast"></div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
