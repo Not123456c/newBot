@@ -404,6 +404,136 @@ def get_chart_data(student_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+
+@app.route('/api/top-students')
+def get_top_students():
+    """
+    🏆 جلب قائمة الأوائل (محسّن ومصلّح)
+    يستخدم student_stats_cache للأداء الأفضل
+    """
+    try:
+        if not supabase:
+            return jsonify({'success': False, 'error': 'قاعدة البيانات غير متصلة'}), 500
+        
+        print("🏆 جلب الأوائل من student_stats_cache...")
+        
+        # محاولة جلب من student_stats_cache
+        try:
+            response = supabase.table("student_stats_cache").select(
+                "student_id, average_grade, rank"
+            ).order("average_grade", desc=True).limit(10).execute()
+            
+            if response.data and len(response.data) > 0:
+                # جلب أسماء الطلاب
+                student_ids = [s['student_id'] for s in response.data]
+                
+                # محاولة جلب من students
+                try:
+                    students_response = supabase.table("students").select(
+                        "student_id, student_name"
+                    ).in_("student_id", student_ids).execute()
+                    
+                    if students_response.data:
+                        names_dict = {s['student_id']: s['student_name'] for s in students_response.data}
+                    else:
+                        raise Exception("No data from students table")
+                        
+                except Exception as e:
+                    print(f"⚠️ Fallback لجدول all_marks: {e}")
+                    # Fallback: جلب من all_marks
+                    marks_response = supabase.table("all_marks").select(
+                        "student_id, student_name"
+                    ).in_("student_id", student_ids).execute()
+                    
+                    names_dict = {}
+                    for m in marks_response.data:
+                        if m['student_id'] not in names_dict:
+                            names_dict[m['student_id']] = m.get('student_name', 'طالب غير معروف')
+                
+                # تنسيق البيانات
+                students = []
+                for student in response.data:
+                    students.append({
+                        'student_id': student['student_id'],
+                        'name': names_dict.get(student['student_id'], 'طالب غير معروف'),
+                        'average': float(student.get('average_grade', 0)),
+                        'rank': student.get('rank', 0)
+                    })
+                
+                print(f"✅ تم جلب {len(students)} طالب من Cache")
+                
+                return jsonify({
+                    'success': True,
+                    'students': students,
+                    'source': 'cache'
+                })
+            else:
+                # إذا Cache فارغ، استخدم الطريقة القديمة
+                print("⚠️ Cache فارغ، استخدام الطريقة القديمة...")
+                raise Exception("Cache empty")
+                
+        except Exception as cache_error:
+            print(f"⚠️ خطأ في Cache: {cache_error}")
+            # Fallback: الطريقة القديمة
+            return get_top_students_legacy()
+        
+    except Exception as e:
+        print(f"❌ خطأ عام: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def get_top_students_legacy():
+    """الطريقة القديمة لجلب الأوائل (Fallback)"""
+    try:
+        print("📊 استخدام الطريقة القديمة لحساب الأوائل...")
+        
+        # جلب جميع العلامات
+        response = supabase.table("all_marks").select("student_id, student_name, total_grade").execute()
+        
+        if not response.data:
+            return jsonify({'success': False, 'error': 'لا توجد بيانات'})
+        
+        # تجميع درجات كل طالب
+        students_grades = {}
+        for row in response.data:
+            sid = row.get('student_id')
+            name = row.get('student_name', 'طالب غير معروف')
+            grade = row.get('total_grade')
+            
+            if sid and grade is not None:
+                if sid not in students_grades:
+                    students_grades[sid] = {'name': name, 'total': 0, 'count': 0}
+                students_grades[sid]['total'] += grade
+                students_grades[sid]['count'] += 1
+        
+        # حساب المعدل
+        averages = []
+        for sid, info in students_grades.items():
+            if info['count'] > 0:
+                avg = round(info['total'] / info['count'], 2)
+                averages.append({
+                    'student_id': sid,
+                    'name': info['name'],
+                    'average': avg
+                })
+        
+        # ترتيب وأخذ أول 10
+        averages.sort(key=lambda x: x['average'], reverse=True)
+        top_10 = averages[:10]
+        
+        print(f"✅ تم حساب الأوائل (طريقة قديمة): {len(top_10)} طالب")
+        
+        return jsonify({
+            'success': True,
+            'students': top_10,
+            'source': 'calculated'
+        })
+        
+    except Exception as e:
+        print(f"❌ خطأ في الطريقة القديمة: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ══════════════════════════════════════
 # تشغيل التطبيق
 # ══════════════════════════════════════
