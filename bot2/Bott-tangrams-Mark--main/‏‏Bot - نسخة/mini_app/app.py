@@ -531,6 +531,247 @@ def get_top_students_legacy():
         
     except Exception as e:
         print(f"❌ خطأ في الطريقة القديمة: {e}")
+
+
+@app.route('/api/generate-image/<student_id>')
+def generate_result_image(student_id):
+    """
+    📸 توليد صورة النتيجة للطالب
+    """
+    try:
+        if not supabase:
+            return jsonify({'success': False, 'error': 'قاعدة البيانات غير متصلة'}), 500
+        
+        print(f"📸 توليد صورة للطالب: {student_id}")
+        
+        # استيراد المكتبات
+        from PIL import Image, ImageDraw, ImageFont
+        import io
+        
+        # جلب البيانات
+        response = supabase.table("all_marks").select("*").eq("student_id", student_id).execute()
+        
+        if not response.data:
+            return jsonify({'success': False, 'error': 'لا توجد نتائج'}), 404
+        
+        data = response.data
+        student_name = data[0].get('student_name', 'طالب')
+        
+        # حساب الإحصائيات
+        total_subjects = len(data)
+        passed = sum(1 for m in data if (m.get('total_grade') or 0) >= 60)
+        failed = total_subjects - passed
+        avg_grade = sum(m.get('total_grade', 0) or 0 for m in data) / total_subjects if total_subjects > 0 else 0
+        
+        # إنشاء صورة
+        width, height = 800, 1000
+        img = Image.new('RGB', (width, height), color='#f8fafc')
+        draw = ImageDraw.Draw(img)
+        
+        # الألوان
+        primary = '#3b82f6'
+        success = '#10b981'
+        danger = '#ef4444'
+        text_dark = '#1e293b'
+        text_light = '#64748b'
+        
+        try:
+            # محاولة تحميل خط عربي
+            font_large = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 32)
+            font_medium = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 24)
+            font_small = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 18)
+        except:
+            # Fallback
+            font_large = ImageFont.load_default()
+            font_medium = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+        
+        # رسم الخلفية العلوية
+        draw.rectangle([(0, 0), (width, 150)], fill=primary)
+        
+        # العنوان
+        title = "نتائجي الجامعية"
+        draw.text((width//2, 50), title, fill='white', font=font_large, anchor='mm')
+        draw.text((width//2, 100), student_name, fill='white', font=font_medium, anchor='mm')
+        
+        # الإحصائيات
+        y = 180
+        
+        # المعدل
+        draw.rounded_rectangle([(50, y), (750, y+80)], radius=10, fill='white', outline=primary, width=2)
+        draw.text((400, y+25), f"المعدل العام", fill=text_dark, font=font_medium, anchor='mm')
+        draw.text((400, y+55), f"{avg_grade:.1f}%", fill=primary, font=font_large, anchor='mm')
+        
+        y += 100
+        
+        # نتائج المواد
+        draw.rounded_rectangle([(50, y), (370, y+80)], radius=10, fill='white', outline=success, width=2)
+        draw.text((210, y+25), "ناجح", fill=text_dark, font=font_medium, anchor='mm')
+        draw.text((210, y+55), str(passed), fill=success, font=font_large, anchor='mm')
+        
+        draw.rounded_rectangle([(430, y), (750, y+80)], radius=10, fill='white', outline=danger, width=2)
+        draw.text((590, y+25), "راسب", fill=text_dark, font=font_medium, anchor='mm')
+        draw.text((590, y+55), str(failed), fill=danger, font=font_large, anchor='mm')
+        
+        y += 100
+        
+        # قائمة المواد
+        draw.text((50, y), "المواد:", fill=text_dark, font=font_medium)
+        y += 40
+        
+        for i, mark in enumerate(data[:10]):  # أول 10 مواد
+            subject = mark.get('subject_name', 'مادة')[:30]
+            grade = mark.get('total_grade', 0) or 0
+            color = success if grade >= 60 else danger
+            
+            # خلفية
+            draw.rounded_rectangle([(50, y), (750, y+50)], radius=8, fill='white')
+            
+            # النص
+            draw.text((70, y+15), f"{i+1}. {subject}", fill=text_dark, font=font_small)
+            draw.text((680, y+15), f"{grade}", fill=color, font=font_medium)
+            
+            y += 60
+            
+            if y > height - 150:
+                break
+        
+        # التذييل
+        draw.text((width//2, height-40), "بوت النتائج الجامعية", fill=text_light, font=font_small, anchor='mm')
+        
+        # حفظ الصورة في buffer
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG', quality=95)
+        buffer.seek(0)
+        
+        print(f"✅ تم توليد الصورة بنجاح")
+        
+        return send_file(
+            buffer,
+            mimetype='image/png',
+            as_attachment=True,
+            download_name=f'result_{student_id}.png'
+        )
+        
+    except Exception as e:
+        print(f"❌ خطأ في توليد الصورة: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/generate-pdf/<student_id>')
+def generate_result_pdf(student_id):
+    """
+    📄 توليد PDF للنتيجة
+    """
+    try:
+        if not supabase:
+            return jsonify({'success': False, 'error': 'قاعدة البيانات غير متصلة'}), 500
+        
+        print(f"📄 توليد PDF للطالب: {student_id}")
+        
+        # استيراد المكتبات
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.lib.units import cm
+        import io
+        
+        # جلب البيانات
+        response = supabase.table("all_marks").select("*").eq("student_id", student_id).execute()
+        
+        if not response.data:
+            return jsonify({'success': False, 'error': 'لا توجد نتائج'}), 404
+        
+        data = response.data
+        student_name = data[0].get('student_name', 'طالب')
+        
+        # حساب الإحصائيات
+        total_subjects = len(data)
+        passed = sum(1 for m in data if (m.get('total_grade') or 0) >= 60)
+        failed = total_subjects - passed
+        avg_grade = sum(m.get('total_grade', 0) or 0 for m in data) / total_subjects if total_subjects > 0 else 0
+        
+        # إنشاء PDF
+        buffer = io.BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        
+        # العنوان
+        pdf.setFont("Helvetica-Bold", 24)
+        pdf.drawCentredString(width/2, height - 2*cm, "University Results")
+        
+        pdf.setFont("Helvetica", 16)
+        pdf.drawCentredString(width/2, height - 3*cm, f"Student: {student_name}")
+        pdf.drawCentredString(width/2, height - 3.8*cm, f"ID: {student_id}")
+        
+        # خط فاصل
+        pdf.line(2*cm, height - 4.5*cm, width - 2*cm, height - 4.5*cm)
+        
+        # الإحصائيات
+        y = height - 6*cm
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawString(2*cm, y, "Statistics:")
+        
+        y -= 0.8*cm
+        pdf.setFont("Helvetica", 12)
+        pdf.drawString(2*cm, y, f"Average Grade: {avg_grade:.1f}%")
+        
+        y -= 0.6*cm
+        pdf.drawString(2*cm, y, f"Passed: {passed} subjects")
+        
+        y -= 0.6*cm
+        pdf.drawString(2*cm, y, f"Failed: {failed} subjects")
+        
+        # قائمة المواد
+        y -= 1.5*cm
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawString(2*cm, y, "Subjects:")
+        
+        y -= 0.8*cm
+        pdf.setFont("Helvetica", 10)
+        
+        for i, mark in enumerate(data):
+            if y < 3*cm:
+                pdf.showPage()
+                y = height - 2*cm
+                pdf.setFont("Helvetica", 10)
+            
+            subject = mark.get('subject_name', 'Subject')[:40]
+            grade = mark.get('total_grade', 0) or 0
+            result = "Pass" if grade >= 60 else "Fail"
+            
+            pdf.drawString(2*cm, y, f"{i+1}. {subject}")
+            pdf.drawString(14*cm, y, f"{grade}")
+            pdf.drawString(16*cm, y, result)
+            
+            y -= 0.6*cm
+        
+        # التذييل
+        pdf.setFont("Helvetica", 8)
+        pdf.drawCentredString(width/2, 1.5*cm, "University Results Bot - Generated PDF")
+        
+        pdf.save()
+        buffer.seek(0)
+        
+        print(f"✅ تم توليد PDF بنجاح")
+        
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'result_{student_id}.pdf'
+        )
+        
+    except Exception as e:
+        print(f"❌ خطأ في توليد PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

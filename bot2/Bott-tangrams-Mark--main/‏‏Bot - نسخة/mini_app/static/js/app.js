@@ -85,8 +85,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         // تهيئة الأحداث
         initializeEventListeners();
         
-        // التحقق من الملف الشخصي
-        await checkUserProfile();
+        // التحقق من وجود حساب مرتبط
+        const savedStudentId = localStorage.getItem('student_id');
+        
+        if (savedStudentId) {
+            // إذا كان هناك حساب محفوظ، حاول تحميله
+            console.log('💾 حساب محفوظ موجود');
+            await checkUserProfile();
+        } else {
+            // إذا لم يكن هناك حساب، اعرض شاشة الربط مباشرة
+            console.log('📝 لا يوجد حساب محفوظ - عرض شاشة الربط');
+            showScreen('link-screen');
+        }
         
     } catch (error) {
         console.error('❌ خطأ في التهيئة:', error);
@@ -153,6 +163,23 @@ function initializeEventListeners() {
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
         settingsBtn.addEventListener('click', () => showToast('الإعدادات قريباً', 'info'));
+    }
+    
+    // أزرار المشاركة
+    const shareBtn = document.getElementById('share-btn');
+    const pdfBtn = document.getElementById('pdf-btn');
+    const refreshBtn = document.getElementById('refresh-btn');
+    
+    if (shareBtn) {
+        shareBtn.addEventListener('click', shareAsImage);
+    }
+    
+    if (pdfBtn) {
+        pdfBtn.addEventListener('click', downloadAsPDF);
+    }
+    
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', refreshResults);
     }
     
     console.log('✅ تم تهيئة الأحداث');
@@ -736,6 +763,131 @@ function storeTelegramId(id) {
 
 function getStoredTelegramId() {
     return localStorage.getItem('telegram_id');
+}
+
+// ══════════════════════════════════════════════════════════
+// 📤 المشاركة والتصدير
+// ══════════════════════════════════════════════════════════
+
+async function shareAsImage() {
+    if (!currentProfile || !currentResults) {
+        showToast('⚠️ لا توجد بيانات للمشاركة', 'warning');
+        return;
+    }
+    
+    console.log('📤 مشاركة كصورة...');
+    showLoading(true);
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/generate-image/${currentProfile.student_id}`);
+        
+        if (!response.ok) {
+            throw new Error('فشل توليد الصورة');
+        }
+        
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        
+        // محاولة استخدام Web Share API
+        if (navigator.share && navigator.canShare) {
+            try {
+                const file = new File([blob], 'نتيجتي.png', { type: 'image/png' });
+                
+                if (navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        title: 'نتيجتي الجامعية',
+                        text: `نتائج ${currentProfile.student_name}`,
+                        files: [file]
+                    });
+                    
+                    showLoading(false);
+                    showToast('✅ تم المشاركة بنجاح', 'success');
+                    return;
+                }
+            } catch (shareError) {
+                console.log('Web Share فشل، استخدام التحميل:', shareError);
+            }
+        }
+        
+        // Fallback: تحميل الصورة
+        const link = document.createElement('a');
+        link.href = imageUrl;
+        link.download = `نتيجة_${currentProfile.student_id}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(imageUrl);
+        
+        showLoading(false);
+        showToast('✅ تم تحميل الصورة', 'success');
+        
+    } catch (error) {
+        console.error('❌ خطأ في المشاركة:', error);
+        showLoading(false);
+        showToast('❌ فشل توليد الصورة', 'error');
+    }
+}
+
+async function downloadAsPDF() {
+    if (!currentProfile || !currentResults) {
+        showToast('⚠️ لا توجد بيانات للتصدير', 'warning');
+        return;
+    }
+    
+    console.log('📥 تحميل PDF...');
+    showLoading(true);
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/generate-pdf/${currentProfile.student_id}`);
+        
+        if (!response.ok) {
+            throw new Error('فشل توليد PDF');
+        }
+        
+        const blob = await response.blob();
+        const pdfUrl = URL.createObjectURL(blob);
+        
+        // تحميل الملف
+        const link = document.createElement('a');
+        link.href = pdfUrl;
+        link.download = `نتيجة_${currentProfile.student_id}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(pdfUrl);
+        
+        showLoading(false);
+        showToast('✅ تم تحميل PDF', 'success');
+        
+    } catch (error) {
+        console.error('❌ خطأ في تحميل PDF:', error);
+        showLoading(false);
+        showToast('❌ فشل توليد PDF', 'error');
+    }
+}
+
+async function refreshResults() {
+    if (!currentProfile) {
+        showToast('⚠️ لا يوجد حساب مربوط', 'warning');
+        return;
+    }
+    
+    console.log('🔄 تحديث النتائج...');
+    showToast('🔄 جاري التحديث...', 'info');
+    
+    try {
+        // مسح Cache
+        localStorage.removeItem('cached_results');
+        localStorage.removeItem('cached_time');
+        
+        // إعادة تحميل
+        await loadResults(currentProfile.student_id);
+        
+        showToast('✅ تم التحديث بنجاح', 'success');
+    } catch (error) {
+        console.error('❌ خطأ في التحديث:', error);
+        showToast('❌ فشل التحديث', 'error');
+    }
 }
 
 // جعل الدوال عالمية
