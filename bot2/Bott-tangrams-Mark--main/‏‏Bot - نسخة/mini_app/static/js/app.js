@@ -398,10 +398,15 @@ function updateResultsUI() {
     const { stats, marks } = currentResults;
     
     // تحديث الإحصائيات الرئيسية
-    document.getElementById('average-grade').textContent = stats.average.toFixed(1) + '%';
-    document.getElementById('passed-count').textContent = stats.passed;
-    document.getElementById('failed-count').textContent = stats.failed;
-    document.getElementById('success-rate').textContent = stats.success_rate.toFixed(1) + '%';
+    const avgGrade = stats.average_grade || stats.average || 0;
+    const passedCount = stats.passed_subjects || stats.passed || 0;
+    const failedCount = stats.failed_subjects || stats.failed || 0;
+    const successRate = stats.success_rate || 0;
+    
+    document.getElementById('average-grade').textContent = avgGrade.toFixed(1) + '%';
+    document.getElementById('passed-count').textContent = passedCount;
+    document.getElementById('failed-count').textContent = failedCount;
+    document.getElementById('success-rate').textContent = successRate.toFixed(1) + '%';
     
     // تحديث قائمة المواد
     const subjectsList = document.getElementById('subjects-list');

@@ -294,7 +294,7 @@ def search_students():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/top/<int:n>')
-def get_top_students(n):
+def get_top_n_students(n):
     """الحصول على أفضل n طلاب"""
     try:
         n = min(n, 50)  # حد أقصى 50
@@ -531,6 +531,7 @@ def get_top_students_legacy():
         
     except Exception as e:
         print(f"❌ خطأ في الطريقة القديمة: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/generate-image/<student_id>')
@@ -580,7 +581,7 @@ def generate_result_image(student_id):
             font_large = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 32)
             font_medium = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 24)
             font_small = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 18)
-        except:
+        except Exception:
             # Fallback
             font_large = ImageFont.load_default()
             font_medium = ImageFont.load_default()
@@ -599,7 +600,7 @@ def generate_result_image(student_id):
         
         # المعدل
         draw.rounded_rectangle([(50, y), (750, y+80)], radius=10, fill='white', outline=primary, width=2)
-        draw.text((400, y+25), f"المعدل العام", fill=text_dark, font=font_medium, anchor='mm')
+        draw.text((400, y+25), "المعدل العام", fill=text_dark, font=font_medium, anchor='mm')
         draw.text((400, y+55), f"{avg_grade:.1f}%", fill=primary, font=font_large, anchor='mm')
         
         y += 100
@@ -644,7 +645,7 @@ def generate_result_image(student_id):
         img.save(buffer, format='PNG', quality=95)
         buffer.seek(0)
         
-        print(f"✅ تم توليد الصورة بنجاح")
+        print("✅ تم توليد الصورة بنجاح")
         
         return send_file(
             buffer,
@@ -756,7 +757,7 @@ def generate_result_pdf(student_id):
         pdf.save()
         buffer.seek(0)
         
-        print(f"✅ تم توليد PDF بنجاح")
+        print("✅ تم توليد PDF بنجاح")
         
         return send_file(
             buffer,
@@ -769,9 +770,6 @@ def generate_result_pdf(student_id):
         print(f"❌ خطأ في توليد PDF: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

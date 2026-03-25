@@ -78,12 +78,23 @@ body {
    ══════════════════════════════════════ */
 
 #loading-screen {
-    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 100vh;
     gap: var(--spacing-md);
+    background: var(--tg-theme-bg-color);
+    z-index: 9999;
+}
+
+#loading-screen.active {
+    display: flex;
 }
 
 .loader {
