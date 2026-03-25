@@ -537,7 +537,7 @@ def get_top_students_legacy():
 @app.route('/api/generate-image/<student_id>')
 def generate_result_image(student_id):
     """
-    📸 توليد صورة النتيجة للطالب
+    📸 توليد صورة النتيجة للطالب مع دعم كامل للعربية
     """
     try:
         if not supabase:
@@ -548,6 +548,16 @@ def generate_result_image(student_id):
         # استيراد المكتبات
         from PIL import Image, ImageDraw, ImageFont
         import io
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        
+        def reshape_arabic(text):
+            """تحويل النص العربي للعرض الصحيح"""
+            try:
+                reshaped = arabic_reshaper.reshape(text)
+                return get_display(reshaped)
+            except Exception:
+                return text
         
         # جلب البيانات
         response = supabase.table("all_marks").select("*").eq("student_id", student_id).execute()
@@ -576,48 +586,65 @@ def generate_result_image(student_id):
         text_dark = '#1e293b'
         text_light = '#64748b'
         
-        try:
-            # محاولة تحميل خط عربي
-            font_large = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 32)
-            font_medium = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 24)
-            font_small = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 18)
-        except Exception:
-            # Fallback
+        # قائمة الخطوط العربية للتجربة
+        arabic_fonts = [
+            '/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf',
+            '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
+            '/usr/share/fonts/truetype/freefont/FreeSerif.ttf',
+            '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
+        ]
+        
+        font_large = None
+        font_medium = None
+        font_small = None
+        
+        for font_path in arabic_fonts:
+            try:
+                font_large = ImageFont.truetype(font_path, 32)
+                font_medium = ImageFont.truetype(font_path, 24)
+                font_small = ImageFont.truetype(font_path, 18)
+                print(f"✅ استخدام الخط: {font_path}")
+                break
+            except Exception:
+                continue
+        
+        if not font_large:
             font_large = ImageFont.load_default()
             font_medium = ImageFont.load_default()
             font_small = ImageFont.load_default()
+            print("⚠️ استخدام الخط الافتراضي")
         
         # رسم الخلفية العلوية
         draw.rectangle([(0, 0), (width, 150)], fill=primary)
         
         # العنوان
-        title = "نتائجي الجامعية"
+        title = reshape_arabic("نتائجي الجامعية")
         draw.text((width//2, 50), title, fill='white', font=font_large, anchor='mm')
-        draw.text((width//2, 100), student_name, fill='white', font=font_medium, anchor='mm')
+        draw.text((width//2, 100), reshape_arabic(student_name), fill='white', font=font_medium, anchor='mm')
         
         # الإحصائيات
         y = 180
         
         # المعدل
         draw.rounded_rectangle([(50, y), (750, y+80)], radius=10, fill='white', outline=primary, width=2)
-        draw.text((400, y+25), "المعدل العام", fill=text_dark, font=font_medium, anchor='mm')
+        draw.text((400, y+25), reshape_arabic("المعدل العام"), fill=text_dark, font=font_medium, anchor='mm')
         draw.text((400, y+55), f"{avg_grade:.1f}%", fill=primary, font=font_large, anchor='mm')
         
         y += 100
         
         # نتائج المواد
         draw.rounded_rectangle([(50, y), (370, y+80)], radius=10, fill='white', outline=success, width=2)
-        draw.text((210, y+25), "ناجح", fill=text_dark, font=font_medium, anchor='mm')
+        draw.text((210, y+25), reshape_arabic("ناجح"), fill=text_dark, font=font_medium, anchor='mm')
         draw.text((210, y+55), str(passed), fill=success, font=font_large, anchor='mm')
         
         draw.rounded_rectangle([(430, y), (750, y+80)], radius=10, fill='white', outline=danger, width=2)
-        draw.text((590, y+25), "راسب", fill=text_dark, font=font_medium, anchor='mm')
+        draw.text((590, y+25), reshape_arabic("راسب"), fill=text_dark, font=font_medium, anchor='mm')
         draw.text((590, y+55), str(failed), fill=danger, font=font_large, anchor='mm')
         
         y += 100
         
         # قائمة المواد
-        draw.text((50, y), "المواد:", fill=text_dark, font=font_medium)
+        draw.text((700, y), reshape_arabic("المواد:"), fill=text_dark, font=font_medium, anchor='rm')
         y += 40
         
         for i, mark in enumerate(data[:10]):  # أول 10 مواد
@@ -628,9 +655,9 @@ def generate_result_image(student_id):
             # خلفية
             draw.rounded_rectangle([(50, y), (750, y+50)], radius=8, fill='white')
             
-            # النص
-            draw.text((70, y+15), f"{i+1}. {subject}", fill=text_dark, font=font_small)
-            draw.text((680, y+15), f"{grade}", fill=color, font=font_medium)
+            # النص (من اليمين لليسار)
+            draw.text((730, y+25), reshape_arabic(f"{i+1}. {subject}"), fill=text_dark, font=font_small, anchor='rm')
+            draw.text((70, y+25), f"{grade}", fill=color, font=font_medium, anchor='lm')
             
             y += 60
             
@@ -638,7 +665,7 @@ def generate_result_image(student_id):
                 break
         
         # التذييل
-        draw.text((width//2, height-40), "بوت النتائج الجامعية", fill=text_light, font=font_small, anchor='mm')
+        draw.text((width//2, height-40), reshape_arabic("بوت النتائج الجامعية"), fill=text_light, font=font_small, anchor='mm')
         
         # حفظ الصورة في buffer
         buffer = io.BytesIO()
