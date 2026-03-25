@@ -23,7 +23,7 @@ from supabase import create_client
 import re
 import os
 from image_generator import generate_result_image, generate_top_students_image
-from analytics import calculate_statistics, analyze_performance, get_top_10_students
+from analytics import calculate_statistics, calculate_statistics_fast, analyze_performance, get_top_10_students
 from ratings import get_rating, format_grade_display
 from recommendations import generate_recommendations, get_motivation_message
 from charts import (create_grades_chart, create_theoretical_practical_chart, 
@@ -554,8 +554,8 @@ def send_student_result(chat_id, student_id):
             
         average = round(total_sum / subjects_count, 1) if subjects_count > 0 else 0
 
-        # حساب الإحصائيات والتحليلات
-        stats = calculate_statistics(data)
+        # 🚀 استخدام Cache للإحصائيات (أسرع)
+        stats = calculate_statistics_fast(student_id, supabase)
         analysis = analyze_performance(data)
         
         # إنشاء نص الكابشن
@@ -791,7 +791,8 @@ def callback_stats(call):
             bot.send_message(call.message.chat.id, "❌ لم يتم العثور على النتائج")
             return
         
-        stats = calculate_statistics(data)
+        # 🚀 استخدام Cache للإحصائيات
+        stats = calculate_statistics_fast(student_id, supabase)
         analysis = analyze_performance(data)
         
         stats_msg = (
@@ -821,7 +822,8 @@ def callback_charts(call):
             bot.send_message(call.message.chat.id, "❌ لم يتم العثور على النتائج")
             return
         
-        stats = calculate_statistics(data)
+        # 🚀 استخدام Cache للإحصائيات
+        stats = calculate_statistics_fast(student_id, supabase)
         bot.send_chat_action(call.message.chat.id, "upload_photo")
         
         # الرسم البياني الأول - العلامات
