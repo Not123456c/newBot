@@ -51,25 +51,60 @@ async function checkUserProfile() {
     const telegramId = currentUser?.id || getStoredTelegramId();
     
     if (!telegramId) {
+        console.log('❌ No telegram_id found');
         showScreen('link-screen');
         return;
     }
     
+    console.log('✅ Checking profile for:', telegramId);
+    
     try {
-        const response = await fetch(`${API_BASE}/api/user/profile?telegram_id=${telegramId}`);
+        // محاولة الاتصال بـ API مع timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 seconds timeout
+        
+        const response = await fetch(`${API_BASE}/api/user/profile?telegram_id=${telegramId}`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        console.log('API Response status:', response.status);
+        
         const data = await response.json();
+        console.log('API Response data:', data);
         
         if (data.success && data.has_profile) {
             currentProfile = data.profile;
+            console.log('✅ Profile found:', currentProfile.student_id);
             await loadResults(currentProfile.student_id);
             showScreen('main-screen');
             updateProfileUI();
         } else {
+            console.log('❌ No profile found');
             showScreen('link-screen');
         }
     } catch (error) {
-        console.error('Error checking profile:', error);
-        showScreen('link-screen');
+        console.error('❌ Error checking profile:', error);
+        
+        // Fallback: التحقق من localStorage
+        const savedStudentId = localStorage.getItem('student_id');
+        if (savedStudentId) {
+            console.log('⚠️ Using saved student_id from localStorage:', savedStudentId);
+            showToast('⚠️ وضع عدم الاتصال - استخدام البيانات المحفوظة');
+            
+            currentProfile = {
+                telegram_id: telegramId,
+                student_id: savedStudentId,
+                student_name: localStorage.getItem('student_name') || 'طالب'
+            };
+            
+            await loadResults(savedStudentId);
+            showScreen('main-screen');
+            updateProfileUI();
+        } else {
+            console.log('❌ No saved data, showing link screen');
+            showScreen('link-screen');
+        }
     }
 }
 
@@ -88,22 +123,81 @@ function storeTelegramId(id) {
 async function loadResults(studentId) {
     try {
         showLoading(true);
+        console.log('📊 Loading results for:', studentId);
         
-        const response = await fetch(`${API_BASE}/api/results/${studentId}`);
+        // محاولة الاتصال بـ API مع timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 seconds
+        
+        const response = await fetch(`${API_BASE}/api/results/${studentId}`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        console.log('API Response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
         const data = await response.json();
+        console.log('Results loaded:', data);
         
         if (data.success) {
             currentResults = data;
+            
+            // حفظ النتائج في localStorage
+            localStorage.setItem('cached_results', JSON.stringify(data));
+            localStorage.setItem('cached_results_time', Date.now().toString());
+            
             updateResultsUI();
             loadChartData(studentId);
         } else {
             showToast('❌ ' + (data.error || 'خطأ في تحميل النتائج'));
+            
+            // محاولة استخدام النتائج المحفوظة
+            tryLoadCachedResults();
         }
     } catch (error) {
-        console.error('Error loading results:', error);
-        showToast('❌ خطأ في الاتصال');
+        console.error('❌ Error loading results:', error);
+        
+        if (error.name === 'AbortError') {
+            showToast('⚠️ انتهت مهلة الاتصال - جاري استخدام البيانات المحفوظة');
+        } else {
+            showToast('❌ خطأ في الاتصال - جاري استخدام البيانات المحفوظة');
+        }
+        
+        // محاولة استخدام النتائج المحفوظة
+        tryLoadCachedResults();
     } finally {
         showLoading(false);
+    }
+}
+
+function tryLoadCachedResults() {
+    try {
+        const cachedResults = localStorage.getItem('cached_results');
+        const cachedTime = localStorage.getItem('cached_results_time');
+        
+        if (cachedResults) {
+            const data = JSON.parse(cachedResults);
+            const cacheAge = Date.now() - parseInt(cachedTime || '0');
+            const cacheAgeHours = Math.floor(cacheAge / (1000 * 60 * 60));
+            
+            currentResults = data;
+            updateResultsUI();
+            
+            if (data.stats) {
+                loadChartData(null, data);
+            }
+            
+            showToast(`📂 تم تحميل النتائج المحفوظة (منذ ${cacheAgeHours} ساعة)`);
+            console.log('✅ Loaded cached results');
+        } else {
+            console.log('❌ No cached results found');
+        }
+    } catch (error) {
+        console.error('Error loading cached results:', error);
     }
 }
 
@@ -167,17 +261,76 @@ function updateResultsUI() {
 // الرسوم البيانية
 // ══════════════════════════════════════
 
-async function loadChartData(studentId) {
+async function loadChartData(studentId, cachedData = null) {
     try {
-        const response = await fetch(`${API_BASE}/api/chart/grades/${studentId}`);
-        const data = await response.json();
+        let data;
         
-        if (data.success) {
+        if (cachedData) {
+            // استخدام البيانات المحفوظة
+            console.log('📊 Using cached data for charts');
+            data = {
+                success: true,
+                chart_data: prepareChartDataFromResults(cachedData)
+            };
+        } else if (studentId) {
+            // جلب البيانات من API
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const response = await fetch(`${API_BASE}/api/chart/grades/${studentId}`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            data = await response.json();
+        } else {
+            // استخدام البيانات الحالية
+            if (currentResults) {
+                data = {
+                    success: true,
+                    chart_data: prepareChartDataFromResults(currentResults)
+                };
+            } else {
+                return;
+            }
+        }
+        
+        if (data && data.success && data.chart_data) {
             createCharts(data.chart_data);
         }
     } catch (error) {
         console.error('Error loading chart data:', error);
+        
+        // Fallback: استخدام البيانات الحالية
+        if (currentResults) {
+            const chartData = prepareChartDataFromResults(currentResults);
+            createCharts(chartData);
+        }
     }
+}
+
+function prepareChartDataFromResults(results) {
+    const chartData = {
+        labels: [],
+        grades: [],
+        theoretical: [],
+        practical: [],
+        colors: []
+    };
+    
+    if (!results || !results.marks) return chartData;
+    
+    results.marks.forEach(m => {
+        chartData.labels.push((m.subject_name || '').substring(0, 15));
+        chartData.grades.push(parseFloat(m.total_grade) || 0);
+        chartData.theoretical.push(parseFloat(m.theoretical_grade) || 0);
+        chartData.practical.push(parseFloat(m.practical_grade) || 0);
+        
+        const grade = parseFloat(m.total_grade) || 0;
+        chartData.colors.push(grade >= 60 ? '#16a34a' : '#dc2626');
+    });
+    
+    return chartData;
 }
 
 function createCharts(chartData) {
@@ -389,12 +542,18 @@ async function linkAccount(studentId) {
         
         if (data.success) {
             storeTelegramId(telegramId);
+            
+            // حفظ البيانات في localStorage للاستخدام offline
+            localStorage.setItem('student_id', studentId);
+            localStorage.setItem('student_name', data.student_name || 'طالب');
+            
             currentProfile = {
                 telegram_id: telegramId,
                 student_id: studentId,
                 student_name: data.student_name
             };
             
+            console.log('✅ Account linked successfully');
             showToast('✅ تم ربط الحساب بنجاح');
             await loadResults(studentId);
             showScreen('main-screen');
